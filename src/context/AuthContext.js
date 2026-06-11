@@ -73,10 +73,21 @@ export const ROLE_TEMPLATES = {
   ],
 };
 
+function hashPassword(password) {
+  if (!password) return '';
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return 'h_' + Math.abs(hash).toString(36);
+}
+
 const defaultAdmin = {
   id: 'admin-default',
   username: 'admin',
-  password: 'admin123',
+  password: hashPassword('admin123'),
   fullName: 'Administrator',
   email: 'admin@company.com',
   role: 'Admin',
@@ -175,7 +186,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback((username, password) => {
     const user = users.find(
-      u => u.username.toLowerCase() === username.toLowerCase() && u.password === password
+      u => u.username.toLowerCase() === username.toLowerCase() && u.password === hashPassword(password)
     );
     if (!user) return { success: false, error: 'Invalid username or password' };
     if (!user.isActive) return { success: false, error: 'This account has been deactivated. Contact your administrator.' };
@@ -198,6 +209,7 @@ export function AuthProvider({ children }) {
     const newUser = {
       id: uuidv4(),
       ...userData,
+      password: hashPassword(userData.password),
       isActive: true,
       createdAt: new Date().toISOString(),
       lastLogin: null,
@@ -216,9 +228,13 @@ export function AuthProvider({ children }) {
     if (userData.username && users.some(u => u.id !== id && u.username.toLowerCase() === userData.username.toLowerCase())) {
       return { success: false, error: 'Username already exists' };
     }
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...userData } : u));
+    const updatedData = { ...userData };
+    if (updatedData.password) {
+      updatedData.password = hashPassword(updatedData.password);
+    }
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updatedData } : u));
     if (currentUser?.id === id) {
-      setCurrentUser(prev => ({ ...prev, ...userData }));
+      setCurrentUser(prev => ({ ...prev, ...updatedData }));
     }
     return { success: true };
   }, [users, currentUser]);

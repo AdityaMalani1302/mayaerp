@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -11,10 +13,13 @@ const emptyForm = { date: today(), partyId: '', amount: 0, mode: 'Cash', bankDet
 
 export default function PaymentEntry() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const unpaidBills = state.purchaseBills.filter(b => b.status !== 'Paid');
 
@@ -26,8 +31,8 @@ export default function PaymentEntry() {
     : null;
 
   // Balance check
-  const payAccountName = form.mode === 'Cash' ? 'Cash' : 'HDFC Bank - Current';
-  const payAccount = state.accounts.find(a => a.name === payAccountName);
+  const payAccount = state.accounts.find(a => form.mode === 'Cash' ? a.name === 'Cash' : a.type === 'Bank');
+  const payAccountName = payAccount?.name || (form.mode === 'Cash' ? 'Cash' : 'Bank');
   const insufficientFunds = payAccount && Number(form.amount) > payAccount.balance;
 
   const errors = useMemo(() => {
@@ -58,16 +63,23 @@ export default function PaymentEntry() {
   const hasErrors = Object.values(errors).some(e => e);
   const touch = (field) => setTouched(prev => ({ ...prev, [field]: true }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSubmitted(true);
     const all = {};
     ['date', 'partyId', 'amount', 'chequeNo', 'bankDetails'].forEach(k => { all[k] = true; });
     setTouched(all);
     if (hasErrors) return;
     if (insufficientFunds) {
-      if (!window.confirm(`${payAccountName} balance (${formatCurrency(payAccount.balance)}) is less than payment amount. The balance will go negative. Continue?`)) return;
+      const ok = await confirm(`${payAccountName} balance (${formatCurrency(payAccount?.balance || 0)}) is less than payment amount. The balance will go negative.`, { title: 'Low Balance', variant: 'warning', confirmLabel: 'Continue Anyway' });
+      if (!ok) return;
     }
-    dispatch({ type: 'ADD_PAYMENT', payload: form });
+    setSaving(true);
+    try {
+      dispatch({ type: 'ADD_PAYMENT', payload: form });
+      addToast('Payment saved successfully', 'success');
+    } catch (e) {
+      addToast('Failed to save payment', 'error');
+    }
     closeForm();
   };
 
@@ -96,7 +108,7 @@ export default function PaymentEntry() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.payments].reverse()} searchFields={['paymentNo']} />
+        <DataTable columns={columns} data={[...state.payments].reverse()} searchFields={['paymentNo']} emptyState={{ title: 'No payments yet', description: 'Record your first payment entry.', actionLabel: 'New Payment', onAction: () => { setForm(emptyForm); setTouched({}); setSubmitted(false); setShowForm(true); } }} />
       </div>
 
       <Modal isOpen={showForm} onClose={closeForm} title="New Payment Entry">
@@ -166,7 +178,7 @@ export default function PaymentEntry() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>Save</button>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={(submitted && hasErrors) || saving}>Save</button>
         </div>
       </Modal>
     </div>

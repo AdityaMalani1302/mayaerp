@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -11,6 +13,8 @@ const emptyAccount = { name: '', type: 'Cash' };
 
 export default function AccountMaster() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyAccount);
   const [editing, setEditing] = useState(null);
@@ -43,8 +47,10 @@ export default function AccountMaster() {
     if (hasErrors) return;
     if (editing) {
       dispatch({ type: 'UPDATE_ACCOUNT', payload: { ...form, id: editing } });
+      addToast('Account updated successfully', 'success');
     } else {
       dispatch({ type: 'ADD_ACCOUNT', payload: form });
+      addToast('Account created successfully', 'success');
     }
     closeForm();
   };
@@ -57,7 +63,7 @@ export default function AccountMaster() {
     setSubmitted(false);
   };
 
-  const handleDelete = (row) => {
+  const handleDelete = async (row) => {
     const refs = isAccountReferenced(row.name, state);
     if (refs.length > 0) {
       alert(`Cannot delete: this account is referenced in ${refs.join(', ')}`);
@@ -67,8 +73,10 @@ export default function AccountMaster() {
       alert(`Cannot delete: account has a non-zero balance (${formatCurrency(row.balance)})`);
       return;
     }
-    if (window.confirm('Are you sure you want to delete this account?')) {
+    const ok = await confirm('Delete this account? This action cannot be undone.', { title: 'Delete Account', variant: 'danger', confirmLabel: 'Delete' });
+    if (ok) {
       dispatch({ type: 'DELETE_ACCOUNT', payload: row.id });
+      addToast('Account deleted', 'success');
     }
   };
 
@@ -95,6 +103,7 @@ export default function AccountMaster() {
           columns={columns}
           data={state.accounts}
           searchFields={['name', 'type']}
+          emptyState={{ title: 'No accounts yet', description: 'Add your first account (Cash, Bank, etc.).', actionLabel: 'Add Account', onAction: () => { setForm(emptyAccount); setEditing(null); setTouched({}); setSubmitted(false); setShowForm(true); } }}
           actions={(row) => (
             <>
               <button onClick={() => { setForm(row); setEditing(row.id); setTouched({}); setSubmitted(false); setShowForm(true); }} className="p-1.5 rounded hover:bg-blue-50 text-blue-600" title="Edit"><Edit2 size={15} /></button>
@@ -124,7 +133,7 @@ export default function AccountMaster() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>
             {editing ? 'Update' : 'Save'}
           </button>
         </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import InvoiceForm from '../common/InvoiceForm';
@@ -8,10 +9,12 @@ import { formatCurrency, formatDate } from '../../utils/helpers';
 
 export default function SalesReturn() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
   const [showForm, setShowForm] = useState(false);
 
   const handleSave = (data) => {
     dispatch({ type: 'ADD_SALES_RETURN', payload: data });
+    addToast('Sales return created successfully', 'success');
     setShowForm(false);
   };
 
@@ -32,7 +35,7 @@ export default function SalesReturn() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.salesReturns].reverse()} searchFields={['returnNo', 'againstInvoice']} />
+        <DataTable columns={columns} data={[...state.salesReturns].reverse()} searchFields={['returnNo', 'againstInvoice']} emptyState={{ title: 'No returns yet', description: 'Create your first sales return.', actionLabel: 'New Return', onAction: () => setShowForm(true) }} />
       </div>
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="New Sales Return (Credit Note)" size="xl">
         <InvoiceForm type="salesReturn" onSave={handleSave} onCancel={() => setShowForm(false)} />

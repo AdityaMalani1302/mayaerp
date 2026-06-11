@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -10,6 +12,8 @@ const emptyTax = { name: '', rate: 0 };
 
 export default function TaxMaster() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyTax);
   const [editing, setEditing] = useState(null);
@@ -45,8 +49,10 @@ export default function TaxMaster() {
     if (hasErrors) return;
     if (editing) {
       dispatch({ type: 'UPDATE_TAX', payload: { ...form, id: editing } });
+      addToast('Tax updated successfully', 'success');
     } else {
       dispatch({ type: 'ADD_TAX', payload: form });
+      addToast('Tax created successfully', 'success');
     }
     closeForm();
   };
@@ -59,14 +65,16 @@ export default function TaxMaster() {
     setSubmitted(false);
   };
 
-  const handleDelete = (row) => {
+  const handleDelete = async (row) => {
     const refs = isTaxReferenced(row.rate, state);
     if (refs.length > 0) {
       alert(`Cannot delete: tax rate ${row.rate}% is assigned to items in ${refs.join(', ')}`);
       return;
     }
-    if (window.confirm('Are you sure you want to delete this tax slab?')) {
+    const ok = await confirm('Delete this tax slab?', { title: 'Delete Tax', variant: 'danger', confirmLabel: 'Delete' });
+    if (ok) {
       dispatch({ type: 'DELETE_TAX', payload: row.id });
+      addToast('Tax deleted', 'success');
     }
   };
 
@@ -89,6 +97,7 @@ export default function TaxMaster() {
           columns={columns}
           data={state.taxes}
           searchFields={['name']}
+          emptyState={{ title: 'No tax slabs yet', description: 'Add your first tax rate (e.g. GST 18%).', actionLabel: 'Add Tax', onAction: () => { setForm(emptyTax); setEditing(null); setTouched({}); setSubmitted(false); setShowForm(true); } }}
           actions={(row) => (
             <>
               <button onClick={() => { setForm(row); setEditing(row.id); setTouched({}); setSubmitted(false); setShowForm(true); }} className="p-1.5 rounded hover:bg-blue-50 text-blue-600" title="Edit"><Edit2 size={15} /></button>
@@ -110,7 +119,7 @@ export default function TaxMaster() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>
             {editing ? 'Update' : 'Save'}
           </button>
         </div>

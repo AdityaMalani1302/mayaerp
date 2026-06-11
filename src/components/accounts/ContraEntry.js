@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -11,10 +13,13 @@ const emptyForm = { date: today(), fromAccount: 'Cash', toAccount: 'HDFC Bank - 
 
 export default function ContraEntry() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const cashBankAccounts = state.accounts.filter(a => a.type === 'Cash' || a.type === 'Bank');
   const fromAcc = state.accounts.find(a => a.name === form.fromAccount);
@@ -42,14 +47,21 @@ export default function ContraEntry() {
   const hasErrors = Object.values(errors).some(e => e);
   const touch = (field) => setTouched(prev => ({ ...prev, [field]: true }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSubmitted(true);
     setTouched({ date: true, amount: true, fromAccount: true, toAccount: true });
     if (hasErrors) return;
     if (insufficientFunds) {
-      if (!window.confirm(`${form.fromAccount} balance (${formatCurrency(fromAcc.balance)}) is less than transfer amount. The balance will go negative. Continue?`)) return;
+      const ok = await confirm(`${form.fromAccount} balance (${formatCurrency(fromAcc?.balance || 0)}) is less than transfer amount. The balance will go negative.`, { title: 'Low Balance', variant: 'warning', confirmLabel: 'Continue Anyway' });
+      if (!ok) return;
     }
-    dispatch({ type: 'ADD_CONTRA_ENTRY', payload: form });
+    setSaving(true);
+    try {
+      dispatch({ type: 'ADD_CONTRA_ENTRY', payload: form });
+      addToast('Contra entry saved successfully', 'success');
+    } catch (e) {
+      addToast('Failed to save contra entry', 'error');
+    }
     closeForm();
   };
 
@@ -78,7 +90,7 @@ export default function ContraEntry() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.contraEntries].reverse()} searchFields={['contraNo']} />
+        <DataTable columns={columns} data={[...state.contraEntries].reverse()} searchFields={['contraNo']} emptyState={{ title: 'No contra entries yet', description: 'Create your first contra entry for cash/bank transfers.', actionLabel: 'New Contra', onAction: () => { setForm(emptyForm); setTouched({}); setSubmitted(false); setShowForm(true); } }} />
       </div>
 
       <Modal isOpen={showForm} onClose={closeForm} title="New Contra Entry (Cash/Bank Transfer)">
@@ -126,7 +138,7 @@ export default function ContraEntry() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>Save</button>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={(submitted && hasErrors) || saving}>Save</button>
         </div>
       </Modal>
     </div>

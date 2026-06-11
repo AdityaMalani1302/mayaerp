@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth, ALL_MODULES, ALL_MODULE_KEYS, ROLE_TEMPLATES } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -21,6 +22,7 @@ const moduleGroups = ALL_MODULES.reduce((acc, mod) => {
 
 export default function UserManagement() {
   const { users, currentUser, addUser, updateUser, deleteUser } = useAuth();
+  const askConfirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyUser);
   const [editing, setEditing] = useState(null);
@@ -150,7 +152,7 @@ export default function UserManagement() {
     setShowForm(true);
   };
 
-  const handleDelete = (user) => {
+  const handleDelete = async (user) => {
     if (user.id === 'admin-default') {
       alert('Cannot delete the default admin account');
       return;
@@ -159,7 +161,8 @@ export default function UserManagement() {
       alert('Cannot delete your own account while logged in');
       return;
     }
-    if (window.confirm(`Are you sure you want to delete user "${user.fullName}" (${user.username})? This action cannot be undone.`)) {
+    const ok = await askConfirm(`Delete user "${user.fullName}" (${user.username})? This cannot be undone.`, { title: 'Delete User', variant: 'danger', confirmLabel: 'Delete' });
+    if (ok) {
       const result = deleteUser(user.id);
       if (!result.success) alert(result.error);
     }

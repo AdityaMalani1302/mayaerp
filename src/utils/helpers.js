@@ -2,6 +2,7 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 
 export const formatCurrency = (amount) => {
   const num = Number(amount) || 0;
+  if (!isFinite(num)) return '₹0.00';
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
@@ -10,7 +11,9 @@ export const formatCurrency = (amount) => {
 };
 
 export const formatNumber = (num) => {
-  return new Intl.NumberFormat('en-IN').format(Number(num) || 0);
+  const n = Number(num) || 0;
+  if (!isFinite(n)) return '0';
+  return new Intl.NumberFormat('en-IN').format(n);
 };
 
 export const formatDate = (date) => {
@@ -37,11 +40,17 @@ export const today = () => format(new Date(), 'yyyy-MM-dd');
 
 export const getAgeing = (dateStr) => {
   if (!dateStr) return '90+';
-  const days = differenceInDays(new Date(), parseISO(dateStr));
-  if (days <= 30) return '0-30';
-  if (days <= 60) return '31-60';
-  if (days <= 90) return '61-90';
-  return '90+';
+  try {
+    const parsed = parseISO(dateStr);
+    const days = differenceInDays(new Date(), parsed);
+    if (!isFinite(days)) return '90+';
+    if (days <= 30) return '0-30';
+    if (days <= 60) return '31-60';
+    if (days <= 90) return '61-90';
+    return '90+';
+  } catch {
+    return '90+';
+  }
 };
 
 export const generateNumber = (prefix, list) => {
@@ -50,6 +59,7 @@ export const generateNumber = (prefix, list) => {
 };
 
 export const roundOff = (amount) => {
+  if (!isFinite(Number(amount))) return { rounded: 0, diff: 0 };
   const rounded = Math.round(amount);
   return { rounded, diff: rounded - amount };
 };
@@ -84,10 +94,10 @@ export const calculateInvoiceSummary = (items, isInterState = false) => {
 
   let cgst = 0, sgst = 0, igst = 0;
   if (isInterState) {
-    igst = totalTax;
+    igst = Number(totalTax.toFixed(2));
   } else {
-    cgst = totalTax / 2;
-    sgst = totalTax / 2;
+    cgst = Math.round(totalTax / 2 * 100) / 100;
+    sgst = Number((totalTax - cgst).toFixed(2));
   }
 
   const beforeRound = taxable + totalTax;
@@ -131,7 +141,7 @@ export const paginate = (items, page, perPage = 20) => {
   const start = (page - 1) * perPage;
   return {
     data: items.slice(start, start + perPage),
-    totalPages: Math.ceil(items.length / perPage),
+    totalPages: Math.ceil(items.length / perPage) || 1,
     total: items.length,
   };
 };

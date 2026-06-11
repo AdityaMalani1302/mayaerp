@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import InvoiceForm from '../common/InvoiceForm';
@@ -8,10 +9,12 @@ import { formatCurrency, formatDate } from '../../utils/helpers';
 
 export default function SalesOrder() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
   const [showForm, setShowForm] = useState(false);
 
   const handleSave = (data) => {
     dispatch({ type: 'ADD_SALES_ORDER', payload: data });
+    addToast('Sales order created successfully', 'success');
     setShowForm(false);
   };
 
@@ -34,10 +37,10 @@ export default function SalesOrder() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.salesOrders].reverse()} searchFields={['orderNo']} />
+        <DataTable columns={columns} data={[...state.salesOrders].reverse()} searchFields={['orderNo']} emptyState={{ title: 'No sales orders yet', description: 'Create your first sales order.', actionLabel: 'New Order', onAction: () => setShowForm(true) }} />
       </div>
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="New Sales Order" size="xl">
-        <InvoiceForm type="sales" onSave={handleSave} onCancel={() => setShowForm(false)} />
+        <InvoiceForm type="salesOrder" onSave={handleSave} onCancel={() => setShowForm(false)} />
       </Modal>
     </div>
   );

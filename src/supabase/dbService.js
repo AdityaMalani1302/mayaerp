@@ -63,6 +63,7 @@ export async function loadAppData(defaults) {
 }
 
 export async function saveAppData(state, prevState) {
+  const STORAGE_KEY = 'erp_app_data';
   try {
     const rows = [];
 
@@ -86,7 +87,12 @@ export async function saveAppData(state, prevState) {
       if (error) throw error;
     }
   } catch (e) {
-    console.error('Supabase save failed:', e);
+    console.error('Supabase save failed, falling back to localStorage:', e);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (lsErr) {
+      console.error('localStorage fallback also failed:', lsErr);
+    }
   }
 }
 

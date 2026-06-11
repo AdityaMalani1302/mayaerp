@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import InvoiceForm from '../common/InvoiceForm';
@@ -9,12 +10,14 @@ import { formatCurrency, formatDate } from '../../utils/helpers';
 
 export default function SalesInvoice() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [printData, setPrintData] = useState(null);
   const [viewData, setViewData] = useState(null);
 
   const handleSave = (data) => {
     dispatch({ type: 'ADD_SALES_INVOICE', payload: data });
+    addToast('Sales invoice created successfully', 'success');
     setShowForm(false);
   };
 
@@ -47,6 +50,7 @@ export default function SalesInvoice() {
           columns={columns}
           data={[...state.salesInvoices].reverse()}
           searchFields={['invoiceNo', (r) => state.parties.find(p => p.id === r.partyId)?.name]}
+          emptyState={{ title: 'No invoices yet', description: 'Create your first sales invoice to get started.', actionLabel: 'New Invoice', onAction: () => setShowForm(true) }}
           actions={(row) => (
             <>
               <button onClick={() => setViewData(row)} className="p-1.5 rounded hover:bg-blue-50 text-blue-600"><Eye size={15} /></button>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -9,10 +10,12 @@ import { validators, validateForm } from '../../utils/validation';
 
 export default function StockJournal() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ date: today(), itemId: '', qty: 0, type: 'Add', reason: '' });
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const selectedItem = state.items.find(i => i.id === form.itemId);
 
@@ -46,11 +49,12 @@ export default function StockJournal() {
     setSubmitted(true);
     setTouched({ date: true, itemId: true, qty: true, reason: true });
     if (hasErrors) return;
-
-    dispatch({ type: 'ADD_STOCK_JOURNAL', payload: form });
-    const qtyChange = form.type === 'Add' ? Number(form.qty) : -Number(form.qty);
-    if (selectedItem) {
-      dispatch({ type: 'UPDATE_ITEM', payload: { ...selectedItem, currentStock: selectedItem.currentStock + qtyChange } });
+    setSaving(true);
+    try {
+      dispatch({ type: 'ADD_STOCK_JOURNAL', payload: { ...form, itemId: form.itemId, qty: Number(form.qty), type: form.type } });
+      addToast('Stock journal entry saved', 'success');
+    } catch (e) {
+      addToast('Failed to save stock journal', 'error');
     }
     closeForm();
   };
@@ -80,7 +84,7 @@ export default function StockJournal() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.stockJournals].reverse()} searchFields={['journalNo', 'reason']} />
+        <DataTable columns={columns} data={[...state.stockJournals].reverse()} searchFields={['journalNo', 'reason']} emptyState={{ title: 'No stock journal entries yet', description: 'Record your first stock adjustment.', actionLabel: 'New Entry', onAction: () => { closeForm(); setShowForm(true); } }} />
       </div>
 
       <Modal isOpen={showForm} onClose={closeForm} title="Stock Adjustment">
@@ -117,7 +121,7 @@ export default function StockJournal() {
 
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>Save</button>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={(submitted && hasErrors) || saving}>Save</button>
         </div>
       </Modal>
     </div>

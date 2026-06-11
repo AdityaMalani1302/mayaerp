@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -11,6 +13,8 @@ const emptyParty = { name: '', type: 'Customer', gstin: '', phone: '', email: ''
 
 export default function PartyMaster() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyParty);
   const [editing, setEditing] = useState(null);
@@ -63,8 +67,10 @@ export default function PartyMaster() {
     if (hasErrors) return;
     if (editing) {
       dispatch({ type: 'UPDATE_PARTY', payload: { ...form, id: editing } });
+      addToast('Party updated successfully', 'success');
     } else {
       dispatch({ type: 'ADD_PARTY', payload: form });
+      addToast('Party created successfully', 'success');
     }
     closeForm();
   };
@@ -85,14 +91,16 @@ export default function PartyMaster() {
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     const refs = isPartyReferenced(id, state);
     if (refs.length > 0) {
       alert(`Cannot delete: this party is referenced in ${refs.join(', ')}`);
       return;
     }
-    if (window.confirm('Are you sure you want to delete this party? This action cannot be undone.')) {
+    const ok = await confirm('Delete this party? This action cannot be undone.', { title: 'Delete Party', variant: 'danger', confirmLabel: 'Delete' });
+    if (ok) {
       dispatch({ type: 'DELETE_PARTY', payload: id });
+      addToast('Party deleted', 'success');
     }
   };
 
@@ -125,6 +133,7 @@ export default function PartyMaster() {
           columns={columns}
           data={state.parties}
           searchFields={['name', 'gstin', 'phone', 'type']}
+          emptyState={{ title: 'No parties yet', description: 'Add your first customer or supplier.', actionLabel: 'Add Party', onAction: () => { setForm(emptyParty); setEditing(null); setTouched({}); setSubmitted(false); setShowForm(true); } }}
           actions={(row) => (
             <>
               <button onClick={() => handleEdit(row)} className="p-1.5 rounded hover:bg-blue-50 text-blue-600" title="Edit"><Edit2 size={15} /></button>
@@ -189,7 +198,7 @@ export default function PartyMaster() {
 
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>
             {editing ? 'Update' : 'Save'}
           </button>
         </div>

@@ -45,20 +45,29 @@ const defaultState = {
   },
 };
 
-function addLedgerEntry(state, entry) {
-  return [...state.ledgerEntries, { id: uuidv4(), date: today(), ...entry }];
+function addLedgerEntry(state, entry, txDate) {
+  return [...state.ledgerEntries, { id: uuidv4(), date: txDate || today(), ...entry }];
 }
 
 function updateAccountBalance(accounts, accountName, amount) {
   return accounts.map(acc =>
-    acc.name === accountName ? { ...acc, balance: acc.balance + amount } : acc
+    acc.name === accountName ? { ...acc, balance: Number(acc.balance) + Number(amount) } : acc
   );
 }
 
 function updateItemStock(items, itemId, qtyChange) {
   return items.map(item =>
-    item.id === itemId ? { ...item, currentStock: item.currentStock + qtyChange } : item
+    item.id === itemId ? { ...item, currentStock: (Number(item.currentStock) || 0) + (Number(qtyChange) || 0) } : item
   );
+}
+
+function resolvePaymentAccount(accounts, paymentMode) {
+  if (paymentMode === 'Cash') return 'Cash';
+  if (paymentMode === 'Bank') {
+    const bank = accounts.find(a => a.type === 'Bank');
+    return bank?.name || 'HDFC Bank - Current';
+  }
+  return null;
 }
 
 function reducer(state, action) {
@@ -114,7 +123,7 @@ function reducer(state, action) {
         items = updateItemStock(items, li.itemId, -(Number(li.qty) || 0));
       });
       let accounts = [...state.accounts];
-      const cashBank = payload.paymentMode === 'Cash' ? 'Cash' : payload.paymentMode === 'Bank' ? 'HDFC Bank - Current' : null;
+      const cashBank = resolvePaymentAccount(accounts, payload.paymentMode);
       if (cashBank) {
         accounts = updateAccountBalance(accounts, cashBank, invoice.grandTotal);
         invoice.status = 'Paid';
@@ -128,7 +137,7 @@ function reducer(state, action) {
         account: 'Sales',
         amount: invoice.grandTotal,
         narration: `Sales Invoice ${invoice.invoiceNo}`,
-      });
+      }, invoice.date);
       return {
         ...state,
         items,
@@ -139,8 +148,18 @@ function reducer(state, action) {
       };
     }
 
-    case 'UPDATE_SALES_INVOICE':
-      return { ...state, salesInvoices: state.salesInvoices.map(i => i.id === payload.id ? { ...i, ...payload } : i) };
+    case 'UPDATE_SALES_INVOICE': {
+      const original = state.salesInvoices.find(i => i.id === payload.id);
+      if (!original) return state;
+      let items = [...state.items];
+      original.items?.forEach(li => {
+        items = updateItemStock(items, li.itemId, Number(li.qty) || 0);
+      });
+      (payload.items || []).forEach(li => {
+        items = updateItemStock(items, li.itemId, -(Number(li.qty) || 0));
+      });
+      return { ...state, items, salesInvoices: state.salesInvoices.map(i => i.id === payload.id ? { ...i, ...payload } : i) };
+    }
 
     case 'ADD_SALES_RETURN': {
       const counter = state.counters.salesReturn + 1;
@@ -158,7 +177,7 @@ function reducer(state, action) {
         account: 'Sales Return',
         amount: ret.grandTotal,
         narration: `Sales Return ${ret.returnNo} against ${ret.againstInvoice}`,
-      });
+      }, ret.date);
       return {
         ...state,
         items,
@@ -237,7 +256,7 @@ function reducer(state, action) {
         items = updateItemStock(items, li.itemId, Number(li.qty) || 0);
       });
       let accounts = [...state.accounts];
-      const cashBank = payload.paymentMode === 'Cash' ? 'Cash' : payload.paymentMode === 'Bank' ? 'HDFC Bank - Current' : null;
+      const cashBank = resolvePaymentAccount(accounts, payload.paymentMode);
       if (cashBank) {
         accounts = updateAccountBalance(accounts, cashBank, -bill.grandTotal);
         bill.status = 'Paid';
@@ -251,7 +270,7 @@ function reducer(state, action) {
         account: 'Purchase',
         amount: bill.grandTotal,
         narration: `Purchase Bill ${bill.entryNo}`,
-      });
+      }, bill.date);
       return {
         ...state,
         items,
@@ -278,7 +297,7 @@ function reducer(state, action) {
         account: 'Purchase Return',
         amount: ret.grandTotal,
         narration: `Purchase Return ${ret.returnNo}`,
-      });
+      }, ret.date);
       return {
         ...state,
         items,
@@ -300,7 +319,7 @@ function reducer(state, action) {
     case 'ADD_RECEIPT': {
       const counter = state.counters.receipt + 1;
       const receipt = { id: uuidv4(), receiptNo: `RCT-${String(counter).padStart(4, '0')}`, ...payload };
-      let accounts = updateAccountBalance(state.accounts, payload.mode === 'Cash' ? 'Cash' : 'HDFC Bank - Current', receipt.amount);
+      let accounts = updateAccountBalance(state.accounts, resolvePaymentAccount(state.accounts, payload.mode === 'Cash' ? 'Cash' : 'Bank') || 'Cash', receipt.amount);
       let invoices = state.salesInvoices;
       if (receipt.againstInvoice) {
         invoices = invoices.map(inv => {
@@ -312,16 +331,17 @@ function reducer(state, action) {
           return inv;
         });
       }
+      const receiptAccountName = resolvePaymentAccount(state.accounts, payload.mode === 'Cash' ? 'Cash' : 'Bank') || 'Cash';
       let ledger = addLedgerEntry(state, {
         type: 'Receipt',
         refNo: receipt.receiptNo,
         partyId: receipt.partyId,
         debit: 0,
         credit: receipt.amount,
-        account: payload.mode === 'Cash' ? 'Cash' : 'HDFC Bank - Current',
+        account: receiptAccountName,
         amount: receipt.amount,
         narration: receipt.narration || `Receipt ${receipt.receiptNo}`,
-      });
+      }, receipt.date);
       return {
         ...state,
         accounts,
@@ -335,7 +355,8 @@ function reducer(state, action) {
     case 'ADD_PAYMENT': {
       const counter = state.counters.payment + 1;
       const payment = { id: uuidv4(), paymentNo: `PAY-${String(counter).padStart(4, '0')}`, ...payload };
-      let accounts = updateAccountBalance(state.accounts, payload.mode === 'Cash' ? 'Cash' : 'HDFC Bank - Current', -payment.amount);
+      const paymentAccountName = resolvePaymentAccount(state.accounts, payload.mode === 'Cash' ? 'Cash' : 'Bank') || 'Cash';
+      let accounts = updateAccountBalance(state.accounts, paymentAccountName, -payment.amount);
       let bills = state.purchaseBills;
       if (payment.againstBill) {
         bills = bills.map(bill => {
@@ -353,10 +374,10 @@ function reducer(state, action) {
         partyId: payment.partyId,
         debit: payment.amount,
         credit: 0,
-        account: payload.mode === 'Cash' ? 'Cash' : 'HDFC Bank - Current',
+        account: paymentAccountName,
         amount: payment.amount,
         narration: payment.narration || `Payment ${payment.paymentNo}`,
-      });
+      }, payment.date);
       return {
         ...state,
         accounts,
@@ -391,7 +412,8 @@ function reducer(state, action) {
     case 'ADD_EXPENSE': {
       const counter = state.counters.expense + 1;
       const expense = { id: uuidv4(), expenseNo: `EXP-${String(counter).padStart(4, '0')}`, ...payload };
-      let accounts = updateAccountBalance(state.accounts, expense.paidFrom === 'Cash' ? 'Cash' : 'HDFC Bank - Current', -expense.amount);
+      const expenseAccountName = resolvePaymentAccount(state.accounts, expense.paidFrom === 'Cash' ? 'Cash' : 'Bank') || 'Cash';
+      let accounts = updateAccountBalance(state.accounts, expenseAccountName, -expense.amount);
       let ledger = addLedgerEntry(state, {
         type: 'Expense',
         refNo: expense.expenseNo,
@@ -400,7 +422,7 @@ function reducer(state, action) {
         credit: 0,
         amount: expense.amount,
         narration: expense.narration || `${expense.expenseHead} expense`,
-      });
+      }, expense.date);
       return {
         ...state,
         accounts,
@@ -437,8 +459,14 @@ function reducer(state, action) {
     case 'ADD_STOCK_JOURNAL': {
       const counter = state.counters.stockJournal + 1;
       const entry = { id: uuidv4(), journalNo: `SJ-${String(counter).padStart(4, '0')}`, ...payload };
+      let items = [...state.items];
+      if (entry.itemId && entry.qty) {
+        const qtyChange = entry.type === 'Add' ? Number(entry.qty) : -(Number(entry.qty) || 0);
+        items = updateItemStock(items, entry.itemId, qtyChange);
+      }
       return {
         ...state,
+        items,
         stockJournals: [...state.stockJournals, entry],
         counters: { ...state.counters, stockJournal: counter },
       };

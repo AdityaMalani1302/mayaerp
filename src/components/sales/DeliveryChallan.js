@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import InvoiceForm from '../common/InvoiceForm';
@@ -9,17 +11,22 @@ import { formatDate } from '../../utils/helpers';
 
 export default function DeliveryChallan() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [printData, setPrintData] = useState(null);
 
   const handleSave = (data) => {
     dispatch({ type: 'ADD_DELIVERY_CHALLAN', payload: { ...data, summary: { subtotal: data.subtotal, taxable: data.taxable, cgst: data.cgst, sgst: data.sgst, igst: data.igst, grandTotal: data.grandTotal, totalDiscount: data.totalDiscount, roundOff: data.roundOff } } });
+    addToast('Delivery challan created successfully', 'success');
     setShowForm(false);
   };
 
-  const handleConvert = (id) => {
-    if (window.confirm('Convert this challan to a Sales Invoice?')) {
+  const handleConvert = async (id) => {
+    const ok = await confirm('Convert this challan to a Sales Invoice?', { title: 'Convert Challan', confirmLabel: 'Convert' });
+    if (ok) {
       dispatch({ type: 'CONVERT_CHALLAN_TO_INVOICE', payload: id });
+      addToast('Challan converted to invoice successfully', 'success');
     }
   };
 
@@ -51,6 +58,7 @@ export default function DeliveryChallan() {
           columns={columns}
           data={[...state.deliveryChallans].reverse()}
           searchFields={['challanNo', 'vehicleNo']}
+          emptyState={{ title: 'No delivery challans yet', description: 'Create your first delivery challan.', actionLabel: 'New Challan', onAction: () => setShowForm(true) }}
           actions={(row) => (
             <>
               <button onClick={() => setPrintData(row)} className="p-1.5 rounded hover:bg-green-50 text-green-600" title="Print"><Printer size={15} /></button>

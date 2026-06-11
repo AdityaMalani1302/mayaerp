@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import InvoiceForm from '../common/InvoiceForm';
@@ -8,10 +9,12 @@ import { formatCurrency, formatDate } from '../../utils/helpers';
 
 export default function PurchaseReturn() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
   const [showForm, setShowForm] = useState(false);
 
   const handleSave = (data) => {
     dispatch({ type: 'ADD_PURCHASE_RETURN', payload: data });
+    addToast('Purchase return created successfully', 'success');
     setShowForm(false);
   };
 
@@ -31,7 +34,7 @@ export default function PurchaseReturn() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.purchaseReturns].reverse()} searchFields={['returnNo']} />
+        <DataTable columns={columns} data={[...state.purchaseReturns].reverse()} searchFields={['returnNo']} emptyState={{ title: 'No purchase returns yet', description: 'Create your first purchase return.', actionLabel: 'New Return', onAction: () => setShowForm(true) }} />
       </div>
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="New Purchase Return (Debit Note)" size="xl">
         <InvoiceForm type="purchaseReturn" onSave={handleSave} onCancel={() => setShowForm(false)} />

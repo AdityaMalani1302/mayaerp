@@ -1,12 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Building2, Calendar, User, LogOut, ChevronDown, Shield, Key } from 'lucide-react';
+import { Building2, Calendar, User, LogOut, ChevronDown, Shield, Key, Moon, Sun } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useTheme } from '../../context/ThemeContext';
 import Modal from '../common/Modal';
 
-export default function Header({ onNavigate }) {
-  const { state, dispatch, resetData } = useApp();
+export default function Header({ onNavigate, onToggleSidebar }) {
+  const { state, resetData } = useApp();
   const { currentUser, logout } = useAuth();
+  const confirm = useConfirm();
+  const { dark, toggleTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
@@ -26,10 +30,9 @@ export default function Header({ onNavigate }) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const handleLogout = () => {
-    if (window.confirm('Are you sure you want to log out?')) {
-      logout();
-    }
+  const handleLogout = async () => {
+    const ok = await confirm('Are you sure you want to log out?', { title: 'Logout', confirmLabel: 'Logout' });
+    if (ok) logout();
   };
 
   const handleChangePassword = () => {
@@ -56,10 +59,18 @@ export default function Header({ onNavigate }) {
 
   return (
     <>
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between no-print">
-        <button
-          onClick={() => onNavigate?.('business-profile')}
-          className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1 -ml-2 transition-colors group"
+      <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex items-center justify-between no-print">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onToggleSidebar}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500 md:hidden"
+            aria-label="Toggle sidebar"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <button
+            onClick={() => onNavigate?.('business-profile')}
+            className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-2 py-1 -ml-2 transition-colors group"
           title="Edit Business Profile"
         >
           {state.company.logo ? (
@@ -77,12 +88,22 @@ export default function Header({ onNavigate }) {
             </p>
           </div>
         </button>
+        </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Calendar size={16} />
             <span>FY {state.company.financialYear}</span>
           </div>
+
+          {/* Dark mode toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-700"
+            title={dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {dark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
 
           {/* User dropdown */}
           <div className="relative" ref={menuRef}>
@@ -128,8 +149,9 @@ export default function Header({ onNavigate }) {
 
                 <div className="border-t border-gray-100 mt-1 pt-1">
                   <button
-                    onClick={() => {
-                      if (window.confirm('Reset all data to defaults?')) {
+                    onClick={async () => {
+                      const ok = await confirm('Reset all data to defaults? This cannot be undone.', { title: 'Reset Data', variant: 'danger', confirmLabel: 'Reset' });
+                      if (ok) {
                         resetData();
                         window.location.reload();
                       }

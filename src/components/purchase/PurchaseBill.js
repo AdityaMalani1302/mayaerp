@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import InvoiceForm from '../common/InvoiceForm';
@@ -9,11 +10,13 @@ import { formatCurrency, formatDate } from '../../utils/helpers';
 
 export default function PurchaseBill() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [printData, setPrintData] = useState(null);
 
   const handleSave = (data) => {
     dispatch({ type: 'ADD_PURCHASE_BILL', payload: data });
+    addToast('Purchase bill created successfully', 'success');
     setShowForm(false);
   };
 
@@ -46,6 +49,7 @@ export default function PurchaseBill() {
           columns={columns}
           data={[...state.purchaseBills].reverse()}
           searchFields={['entryNo', 'billNo', (r) => state.parties.find(p => p.id === r.partyId)?.name]}
+          emptyState={{ title: 'No purchase bills yet', description: 'Create your first purchase bill.', actionLabel: 'New Bill', onAction: () => setShowForm(true) }}
           actions={(row) => (
             <>
               <button onClick={() => setPrintData(row)} className="p-1.5 rounded hover:bg-green-50 text-green-600"><Printer size={15} /></button>

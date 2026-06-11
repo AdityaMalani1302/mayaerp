@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -11,6 +13,8 @@ const emptyItem = { name: '', category: '', unit: 'pcs', hsnCode: '', purchaseRa
 
 export default function ItemMaster() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyItem);
   const [editing, setEditing] = useState(null);
@@ -68,8 +72,10 @@ export default function ItemMaster() {
     if (hasBlockingErrors) return;
     if (editing) {
       dispatch({ type: 'UPDATE_ITEM', payload: { ...form, id: editing } });
+      addToast('Item updated successfully', 'success');
     } else {
       dispatch({ type: 'ADD_ITEM', payload: form });
+      addToast('Item created successfully', 'success');
     }
     closeForm();
   };
@@ -90,14 +96,16 @@ export default function ItemMaster() {
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     const refs = isItemReferenced(id, state);
     if (refs.length > 0) {
       alert(`Cannot delete: this item is referenced in ${refs.join(', ')}`);
       return;
     }
-    if (window.confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
+    const ok = await confirm('Delete this item? This action cannot be undone.', { title: 'Delete Item', variant: 'danger', confirmLabel: 'Delete' });
+    if (ok) {
       dispatch({ type: 'DELETE_ITEM', payload: id });
+      addToast('Item deleted', 'success');
     }
   };
 
@@ -128,6 +136,7 @@ export default function ItemMaster() {
           columns={columns}
           data={state.items}
           searchFields={['name', 'category', 'hsnCode']}
+          emptyState={{ title: 'No items yet', description: 'Add your first item or product.', actionLabel: 'Add Item', onAction: () => { setForm(emptyItem); setEditing(null); setTouched({}); setSubmitted(false); setShowForm(true); } }}
           actions={(row) => (
             <>
               <button onClick={() => handleEdit(row)} className="p-1.5 rounded hover:bg-blue-50 text-blue-600" title="Edit"><Edit2 size={15} /></button>
@@ -198,7 +207,7 @@ export default function ItemMaster() {
 
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasBlockingErrors}>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={submitted && hasBlockingErrors}>
             {editing ? 'Update' : 'Save'}
           </button>
         </div>

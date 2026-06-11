@@ -1,33 +1,33 @@
-// ─── Regex patterns ───
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HSN_REGEX = /^[0-9]{4,8}$/;
 const VEHICLE_REGEX = /^[A-Z]{2}\s?[0-9]{1,2}\s?[A-Z]{0,3}\s?[0-9]{4}$/i;
 
-// ─── Field-level validators ───
+function isString(v) { return typeof v === 'string'; }
+
 export const validators = {
   required: (value, label = 'This field') => {
     if (value === null || value === undefined) return `${label} is required`;
-    if (typeof value === 'string' && !value.trim()) return `${label} is required`;
+    if (isString(value) && !value.trim()) return `${label} is required`;
     if (typeof value === 'number' && isNaN(value)) return `${label} is required`;
     return '';
   },
 
   minLength: (value, min, label = 'This field') => {
     if (!value) return '';
-    if (String(value).trim().length < min) return `${label} must be at least ${min} characters`;
+    if (isString(value) && value.trim().length < min) return `${label} must be at least ${min} characters`;
     return '';
   },
 
   maxLength: (value, max, label = 'This field') => {
     if (!value) return '';
-    if (String(value).trim().length > max) return `${label} must be at most ${max} characters`;
+    if (isString(value) && value.trim().length > max) return `${label} must be at most ${max} characters`;
     return '';
   },
 
   gstin: (value) => {
-    if (!value) return ''; // optional
+    if (!value || !isString(value)) return '';
     const v = value.toUpperCase().trim();
     if (v.length !== 15) return 'GSTIN must be exactly 15 characters';
     if (!GSTIN_REGEX.test(v)) return 'Invalid GSTIN format (e.g. 27AADCA1234B1Z5)';
@@ -35,7 +35,7 @@ export const validators = {
   },
 
   phone: (value) => {
-    if (!value) return '';
+    if (!value || !isString(value)) return '';
     const v = value.replace(/[\s\-+()]/g, '');
     if (v.length < 10) return 'Phone must be at least 10 digits';
     if (v.length === 10 && !PHONE_REGEX.test(v)) return 'Invalid phone number';
@@ -44,45 +44,47 @@ export const validators = {
   },
 
   email: (value) => {
-    if (!value) return '';
+    if (!value || !isString(value)) return '';
     if (!EMAIL_REGEX.test(value.trim())) return 'Invalid email format';
     return '';
   },
 
   hsnCode: (value) => {
-    if (!value) return '';
+    if (!value || !isString(value)) return '';
     if (!HSN_REGEX.test(value.trim())) return 'HSN must be 4-8 digits';
     return '';
   },
 
   vehicleNo: (value) => {
-    if (!value) return '';
+    if (!value || !isString(value)) return '';
     if (!VEHICLE_REGEX.test(value.trim())) return 'Invalid vehicle no (e.g. MH12AB1234)';
     return '';
   },
 
   positiveNumber: (value, label = 'Value') => {
     const n = Number(value);
-    if (isNaN(n)) return `${label} must be a number`;
+    if (!isFinite(n)) return `${label} must be a number`;
     if (n < 0) return `${label} cannot be negative`;
     return '';
   },
 
   positiveNonZero: (value, label = 'Value') => {
     const n = Number(value);
-    if (isNaN(n)) return `${label} must be a number`;
+    if (!isFinite(n)) return `${label} must be a number`;
     if (n <= 0) return `${label} must be greater than zero`;
     return '';
   },
 
   maxValue: (value, max, label = 'Value') => {
     const n = Number(value);
+    if (!isFinite(n)) return '';
     if (n > max) return `${label} cannot exceed ${max}`;
     return '';
   },
 
   minValue: (value, min, label = 'Value') => {
     const n = Number(value);
+    if (!isFinite(n)) return '';
     if (n < min) return `${label} must be at least ${min}`;
     return '';
   },
@@ -102,9 +104,9 @@ export const validators = {
 
   unique: (value, existingValues, label = 'Value', editingId = null) => {
     if (!value) return '';
-    const trimmed = value.trim().toLowerCase();
+    const trimmed = String(value).trim().toLowerCase();
     const exists = existingValues.some(
-      item => item.value.toLowerCase() === trimmed && item.id !== editingId
+      item => String(item.value).toLowerCase() === trimmed && item.id !== editingId
     );
     if (exists) return `${label} already exists`;
     return '';
@@ -112,7 +114,7 @@ export const validators = {
 
   percentage: (value, label = 'Percentage') => {
     const n = Number(value);
-    if (isNaN(n)) return `${label} must be a number`;
+    if (!isFinite(n)) return `${label} must be a number`;
     if (n < 0) return `${label} cannot be negative`;
     if (n > 100) return `${label} cannot exceed 100%`;
     return '';
@@ -133,15 +135,11 @@ export const validators = {
   },
 };
 
-// ─── Form-level validate helper ───
-// Takes a rules object { fieldName: [errorMsg1, errorMsg2, ...] }
-// Returns { errors: { fieldName: firstError }, isValid: boolean }
 export function validateForm(rules) {
   const errors = {};
   let isValid = true;
 
   Object.entries(rules).forEach(([field, messages]) => {
-    // messages is an array of validation results; first non-empty wins
     const msgs = Array.isArray(messages) ? messages : [messages];
     const firstError = msgs.find(m => m && m.length > 0);
     if (firstError) {
@@ -153,7 +151,6 @@ export function validateForm(rules) {
   return { errors, isValid };
 }
 
-// ─── Check if entity is referenced in transactions ───
 export function isPartyReferenced(partyId, state) {
   const refs = [];
   if (state.salesInvoices.some(i => i.partyId === partyId)) refs.push('Sales Invoices');

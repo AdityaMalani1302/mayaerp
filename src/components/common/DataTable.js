@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
+import EmptyState from './EmptyState';
+import { Skeleton, TableSkeleton } from './Skeleton';
 
-export default function DataTable({ columns, data, searchFields = [], actions, onRowClick, pageSize = 15 }) {
+export default function DataTable({ columns, data, searchFields = [], actions, onRowClick, pageSize = 15, emptyState, loading }) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState(null);
@@ -43,6 +45,42 @@ export default function DataTable({ columns, data, searchFields = [], actions, o
     }
   };
 
+  if (loading) {
+    return (
+      <div>
+        {searchFields.length > 0 && <div className="mb-4 relative"><Skeleton className="h-10 max-w-sm rounded-lg" /></div>}
+        <TableSkeleton rows={5} cols={columns.length} />
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="card">
+        {searchFields.length > 0 && (
+          <div className="mb-4 relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              className="input pl-9 max-w-sm"
+              data-datatable-search
+            />
+          </div>
+        )}
+        <EmptyState
+          icon={emptyState?.icon || Inbox}
+          title={emptyState?.title || 'No records found'}
+          description={emptyState?.description}
+          actionLabel={emptyState?.actionLabel}
+          onAction={emptyState?.onAction}
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       {searchFields.length > 0 && (
@@ -50,10 +88,11 @@ export default function DataTable({ columns, data, searchFields = [], actions, o
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search... (Press / to focus)"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
             className="input pl-9 max-w-sm"
+            data-datatable-search
           />
         </div>
       )}
@@ -75,14 +114,14 @@ export default function DataTable({ columns, data, searchFields = [], actions, o
                   </span>
                 </th>
               ))}
-              {actions && <th style={{ width: '120px' }}>Actions</th>}
+              {actions && <th className="sticky-header" style={{ width: '120px' }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {paged.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + (actions ? 1 : 0)} className="text-center py-8 text-gray-400">
-                  No records found
+                <td colSpan={columns.length + (actions ? 1 : 0)} className="text-center py-12 text-gray-400">
+                  No results match your search
                 </td>
               </tr>
             ) : (

@@ -9,10 +9,13 @@ const emptyLine = { itemId: '', qty: 1, rate: 0, discountPercent: 0, taxPercent:
 
 export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialData }) {
   const { state } = useApp();
-  const isSales = type === 'sales' || type === 'salesReturn';
-  const isPurchase = type === 'purchase' || type === 'purchaseReturn';
+  const [saving, setSaving] = useState(false);
+  const isSales = type === 'sales' || type === 'salesReturn' || type === 'salesOrder';
+
   const isReturn = type === 'salesReturn' || type === 'purchaseReturn';
   const isChallan = type === 'challan';
+  const isSalesInvoice = type === 'sales';
+  const isPurchaseBill = type === 'purchase';
 
   const parties = state.parties.filter(p =>
     isSales || isChallan ? (p.type === 'Customer' || p.type === 'Both') :
@@ -50,7 +53,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
       partyId: [validators.required(form.partyId, isSales || isChallan ? 'Customer' : 'Supplier')],
     };
 
-    if (isPurchase && !isReturn) {
+    if (isPurchaseBill && !isReturn) {
       rules.billNo = [validators.required(form.billNo, 'Supplier bill no')];
       if (form.dueDate && form.date) {
         rules.dueDate = [validators.dateAfter(form.dueDate, form.date, 'Due date', 'invoice date')];
@@ -69,13 +72,13 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
       rules.narration = [validators.maxLength(form.narration, 500, 'Narration')];
     }
 
-    if (isPurchase) {
+    if (isPurchaseBill) {
       rules.additionalCharges = [validators.positiveNumber(form.additionalCharges, 'Additional charges')];
     }
 
     const { errors } = validateForm(rules);
     return errors;
-  }, [form, isSales, isPurchase, isReturn, isChallan]);
+  }, [form, isSales, isReturn, isChallan, isPurchaseBill]);
 
   // ─── Line item validation ───
   const validatedLines = useMemo(() => {
@@ -101,7 +104,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
       }
 
       // Stock check for sales/challan
-      if ((isSales || isChallan) && !isReturn && item) {
+      if ((isSalesInvoice || isChallan) && !isReturn && item) {
         if (Number(line.qty) > item.currentStock) {
           errs.qty = `Insufficient stock (available: ${item.currentStock})`;
         }
@@ -119,7 +122,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
 
       return { errors: errs };
     });
-  }, [calculatedLines, state.items, isSales, isChallan, isReturn]);
+  }, [calculatedLines, state.items, isChallan, isReturn, isSalesInvoice]);
 
   const hasLineErrors = validatedLines.some(l => Object.keys(l.errors).length > 0);
   const validItemCount = calculatedLines.filter(l => l.itemId).length;
@@ -143,7 +146,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
       if (field === 'itemId') {
         const item = state.items.find(i => i.id === value);
         if (item) {
-          updated[idx].rate = isSales || isChallan ? item.saleRate : item.purchaseRate;
+          updated[idx].rate = (isSalesInvoice || isChallan) ? item.saleRate : item.purchaseRate;
           updated[idx].taxPercent = item.taxPercent;
           updated[idx].unit = item.unit;
           updated[idx].itemName = item.name;
@@ -151,11 +154,10 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
       }
       return updated;
     });
-  }, [state.items, isSales, isChallan]);
+  }, [state.items, isChallan, isSalesInvoice]);
 
   const handleSubmit = () => {
     setSubmitted(true);
-    // Touch all header fields
     const allTouched = {};
     Object.keys(headerErrors).forEach(k => { allTouched[k] = true; });
     allTouched.partyId = true;
@@ -164,6 +166,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
 
     if (hasAnyErrors) return;
 
+    setSaving(true);
     const data = {
       ...form,
       items: calculatedLines.filter(l => l.itemId),
@@ -176,15 +179,15 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
   // Cash/bank balance check warning
   const paymentWarning = useMemo(() => {
     if (form.paymentMode === 'Credit') return '';
-    if (isPurchase && !isReturn) {
-      const accountName = form.paymentMode === 'Cash' ? 'Cash' : 'HDFC Bank - Current';
-      const account = state.accounts.find(a => a.name === accountName);
+    if (isPurchaseBill && !isReturn) {
+      const account = state.accounts.find(a => form.paymentMode === 'Cash' ? a.name === 'Cash' : a.type === 'Bank');
+      const accountName = account?.name || (form.paymentMode === 'Cash' ? 'Cash' : 'Bank');
       if (account && summary.grandTotal > account.balance) {
         return `Warning: ${accountName} balance (${formatCurrency(account.balance)}) is less than invoice total (${formatCurrency(summary.grandTotal)})`;
       }
     }
     return '';
-  }, [form.paymentMode, isPurchase, isReturn, state.accounts, summary.grandTotal]);
+  }, [form.paymentMode, isPurchaseBill, isReturn, state.accounts, summary.grandTotal]);
 
   return (
     <div className="space-y-6">
@@ -209,7 +212,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
           </select>
         </FormField>
 
-        {isPurchase && !isReturn && (
+        {isPurchaseBill && !isReturn && (
           <FormField label="Bill No (Supplier)" required error={headerErrors.billNo} touched={touched.billNo || submitted}>
             <input className="input" value={form.billNo} onChange={e => setForm({...form, billNo: e.target.value})} onBlur={() => touch('billNo')} maxLength={50} placeholder="Supplier's bill number" />
           </FormField>
@@ -221,15 +224,17 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
           </FormField>
         )}
 
-        <FormField label="Payment Mode" required>
-          <select className="input" value={form.paymentMode} onChange={e => setForm({...form, paymentMode: e.target.value})}>
-            <option>Credit</option>
-            <option>Cash</option>
-            <option>Bank</option>
-          </select>
-        </FormField>
+        {!(type === 'salesOrder' || type === 'purchaseOrder') && (
+          <FormField label="Payment Mode" required>
+            <select className="input" value={form.paymentMode} onChange={e => setForm({...form, paymentMode: e.target.value})}>
+              <option>Credit</option>
+              <option>Cash</option>
+              <option>Bank</option>
+            </select>
+          </FormField>
+        )}
 
-        {isPurchase && !isReturn && (
+        {isPurchaseBill && !isReturn && (
           <FormField label="Due Date" error={headerErrors.dueDate} touched={touched.dueDate || submitted} hint="Must be on or after invoice date">
             <input className="input" type="date" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} onBlur={() => touch('dueDate')} min={form.date} />
           </FormField>
@@ -307,7 +312,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
                         <option value="">-- Select Item --</option>
                         {state.items.map(i => (
                           <option key={i.id} value={i.id}>
-                            {i.name} {(isSales || isChallan) && !isReturn ? `[Stock: ${i.currentStock}]` : ''}
+                            {i.name} {(isSalesInvoice || isChallan) && !isReturn ? `[Stock: ${i.currentStock}]` : ''}
                           </option>
                         ))}
                       </select>
@@ -318,7 +323,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
                         className={`input !py-1 !text-xs text-right ${showLineErr && le.qty ? '!border-red-400' : ''}`}
                         type="number"
                         min="1"
-                        max={item && (isSales || isChallan) && !isReturn ? item.currentStock : 999999}
+                        max={item && (isSalesInvoice || isChallan) && !isReturn ? item.currentStock : 999999}
                         value={line.qty}
                         onChange={e => updateLine(idx, 'qty', Number(e.target.value))}
                       />
@@ -374,7 +379,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
           <FormField label="Narration" error={headerErrors.narration} touched={touched.narration || submitted}>
             <textarea className="input" rows={3} value={form.narration} onChange={e => setForm({...form, narration: e.target.value})} onBlur={() => touch('narration')} maxLength={500} placeholder="Notes..." />
           </FormField>
-          {isPurchase && (
+          {isPurchaseBill && (
             <div className="mt-3">
               <FormField label="Additional Charges (Freight, Labour, etc.)" error={headerErrors.additionalCharges} touched={touched.additionalCharges || submitted}>
                 <input className="input max-w-xs" type="number" min="0" step="0.01" value={form.additionalCharges} onChange={e => setForm({...form, additionalCharges: Number(e.target.value)})} onBlur={() => touch('additionalCharges')} />
@@ -409,7 +414,7 @@ export default function InvoiceForm({ type = 'sales', onSave, onCancel, initialD
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t">
         <button onClick={onCancel} className="btn btn-secondary">Cancel</button>
-        <button onClick={handleSubmit} className="btn btn-primary" disabled={submitted && hasAnyErrors}>Save</button>
+        <button data-keyboard-save onClick={handleSubmit} className="btn btn-primary" disabled={(submitted && hasAnyErrors) || saving}>Save</button>
       </div>
     </div>
   );

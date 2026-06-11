@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import ErrorBoundary from './components/common/ErrorBoundary';
+import { ToastProvider } from './context/ToastContext';
+import { ConfirmProvider } from './context/ConfirmContext';
+import { ThemeProvider } from './context/ThemeContext';
 import LoginPage from './components/auth/LoginPage';
 import AccessDenied from './components/auth/AccessDenied';
+import GlobalSearch from './components/common/GlobalSearch';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import Dashboard from './components/dashboard/Dashboard';
@@ -89,14 +94,35 @@ function AppContent() {
   const { isLoggedIn, hasAccess, authLoading } = useAuth();
   const { loading } = useApp();
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('erp_sidebar_collapsed') === 'true'; } catch { return false; }
+  });
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const handleKeyboard = useCallback((e) => {
-    if (e.key === 'Escape') {
-      // handled by individual modals
-    }
-    if (e.key === 'F2') {
+    if (e.key === 'Escape') return;
+    if (e.key === 'F2') { e.preventDefault(); return; }
+
+    const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
       e.preventDefault();
+      setShowGlobalSearch(true);
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      const saveBtn = document.querySelector('[data-keyboard-save]');
+      saveBtn?.click();
+      return;
+    }
+
+    if (e.key === '/' && !isInput) {
+      e.preventDefault();
+      const searchInput = document.querySelector('[data-datatable-search]');
+      searchInput?.focus();
     }
   }, []);
 
@@ -118,33 +144,47 @@ function AppContent() {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Mobile overlay */}
+      {mobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setMobileSidebarOpen(false)} />}
       <Sidebar
         currentPage={currentPage}
-        onNavigate={setCurrentPage}
+        onNavigate={(key) => { setMobileSidebarOpen(false); setCurrentPage(key); }}
         collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onToggle={() => { const next = !sidebarCollapsed; setSidebarCollapsed(next); try { localStorage.setItem('erp_sidebar_collapsed', next); } catch {} }}
+        mobileOpen={mobileSidebarOpen}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header onNavigate={setCurrentPage} />
-        <main className="flex-1 overflow-y-auto p-6 bg-gray-50">
-          {canAccess ? (
-            <PageComponent />
-          ) : (
-            <AccessDenied onGoHome={() => setCurrentPage('dashboard')} />
-          )}
+        <Header onNavigate={setCurrentPage} onToggleSidebar={() => setMobileSidebarOpen(o => !o)} />
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50">
+          <div key={currentPage} className="animate-fade-in">
+            {canAccess ? (
+              <PageComponent />
+            ) : (
+              <AccessDenied onGoHome={() => setCurrentPage('dashboard')} />
+            )}
+          </div>
         </main>
       </div>
+      <GlobalSearch isOpen={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} onNavigate={setCurrentPage} />
     </div>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+      <ToastProvider>
+        <ConfirmProvider>
+          <AuthProvider>
+            <AppProvider>
+              <AppContent />
+            </AppProvider>
+          </AuthProvider>
+        </ConfirmProvider>
+      </ToastProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

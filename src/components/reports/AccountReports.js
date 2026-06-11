@@ -30,14 +30,19 @@ export default function AccountReports() {
   const renderReport = () => {
     switch (report) {
       case 'cashbook': {
+        const cashAccountName = state.accounts.find(a => a.type === 'Cash')?.name || 'Cash';
         const cashEntries = filteredLedger.filter(e =>
-          e.account === 'Cash' || e.type === 'Receipt' || e.type === 'Payment' || e.type === 'Expense' || e.type === 'Contra'
+          e.account === cashAccountName || e.type === 'Receipt' || e.type === 'Payment' || e.type === 'Expense' || e.type === 'Contra'
         );
-        let balance = state.accounts.find(a => a.name === 'Cash')?.balance || 50000;
-        const data = cashEntries.map(e => {
-          const inAmt = e.type === 'Receipt' || (e.type === 'Sales' && e.account === 'Cash') ? e.amount : (e.type === 'Contra' && e.narration?.includes('to Cash') ? e.amount : 0);
-          const outAmt = e.type === 'Payment' || e.type === 'Expense' || (e.type === 'Contra' && e.narration?.includes('Cash to')) ? e.amount : 0;
-          return { ...e, cashIn: inAmt, cashOut: outAmt, balance };
+        const sorted = [...cashEntries].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        let runningBalance = state.accounts.find(a => a.type === 'Cash')?.balance || 0;
+        const data = sorted.map(e => {
+          const inAmt = (e.type === 'Receipt' || e.type === 'Sales') && e.debit > 0 ? e.amount : (e.type === 'Contra' && (e.narration?.includes('to ' + cashAccountName) || e.narration?.includes(cashAccountName + ' to')) ? (e.narration?.startsWith(cashAccountName) ? 0 : e.amount) : 0);
+          const outAmt = (e.type === 'Payment' || e.type === 'Expense') && e.debit > 0 ? e.amount : 0;
+          const inVal = Number(inAmt) || 0;
+          const outVal = Number(outAmt) || 0;
+          runningBalance = runningBalance + inVal - outVal;
+          return { ...e, cashIn: inVal, cashOut: outVal, balance: runningBalance };
         });
         return <DataTable columns={[
           { key: 'date', label: 'Date', render: (v) => formatDate(v) },
@@ -46,13 +51,24 @@ export default function AccountReports() {
           { key: 'narration', label: 'Narration' },
           { key: 'cashIn', label: 'Cash In', align: 'right', render: (v) => v > 0 ? <span className="text-green-600">{formatCurrency(v)}</span> : '-' },
           { key: 'cashOut', label: 'Cash Out', align: 'right', render: (v) => v > 0 ? <span className="text-red-600">{formatCurrency(v)}</span> : '-' },
+          { key: 'balance', label: 'Balance', align: 'right', render: (v) => formatCurrency(v) },
         ]} data={data} searchFields={['refNo', 'narration']} />;
       }
 
       case 'bankbook': {
+        const bankAccounts = state.accounts.filter(a => a.type === 'Bank');
+        const bankNames = bankAccounts.map(a => a.name);
         const bankEntries = filteredLedger.filter(e =>
-          e.account?.includes('Bank') || (e.type === 'Contra' && (e.narration?.includes('Bank') || false))
+          bankNames.includes(e.account) || (e.type === 'Contra' && bankNames.some(n => e.narration?.includes(n)))
         );
+        const sorted = [...bankEntries].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        let runningBalance = bankAccounts.reduce((s, a) => s + (a.balance || 0), 0);
+        const data = sorted.map(e => {
+          const dbVal = Number(e.debit) || 0;
+          const crVal = Number(e.credit) || 0;
+          runningBalance = runningBalance + dbVal - crVal;
+          return { ...e, balance: runningBalance };
+        });
         return <DataTable columns={[
           { key: 'date', label: 'Date', render: (v) => formatDate(v) },
           { key: 'type', label: 'Type', render: (v) => <span className="badge badge-gray">{v}</span> },
@@ -60,7 +76,8 @@ export default function AccountReports() {
           { key: 'narration', label: 'Narration' },
           { key: 'debit', label: 'Debit', align: 'right', render: (v) => v > 0 ? formatCurrency(v) : '-' },
           { key: 'credit', label: 'Credit', align: 'right', render: (v) => v > 0 ? formatCurrency(v) : '-' },
-        ]} data={bankEntries} searchFields={['refNo', 'narration']} />;
+          { key: 'balance', label: 'Balance', align: 'right', render: (v) => formatCurrency(v) },
+        ]} data={data} searchFields={['refNo', 'narration']} />;
       }
 
       case 'ledger': {

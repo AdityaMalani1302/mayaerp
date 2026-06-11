@@ -15,7 +15,7 @@ export default function LowStock() {
     )},
     { key: 'reorderLevel', label: 'Reorder Level', align: 'right' },
     { key: 'deficit', label: 'Deficit', align: 'right', render: (_, row) => (
-      <span className="text-red-600">{row.reorderLevel - row.currentStock}</span>
+      <span className="text-red-600">{row.reorderLevel ? Math.max(0, (row.reorderLevel || 0) - (row.currentStock || 0)) : '-'}</span>
     )},
   ];
 

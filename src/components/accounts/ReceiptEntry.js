@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -11,10 +12,12 @@ const emptyForm = { date: today(), partyId: '', amount: 0, mode: 'Cash', bankDet
 
 export default function ReceiptEntry() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const unpaidInvoices = state.salesInvoices.filter(i => i.status !== 'Paid');
 
@@ -63,7 +66,13 @@ export default function ReceiptEntry() {
     ['date', 'partyId', 'amount', 'chequeNo', 'bankDetails'].forEach(k => { all[k] = true; });
     setTouched(all);
     if (hasErrors) return;
-    dispatch({ type: 'ADD_RECEIPT', payload: form });
+    setSaving(true);
+    try {
+      dispatch({ type: 'ADD_RECEIPT', payload: form });
+      addToast('Receipt saved successfully', 'success');
+    } catch (e) {
+      addToast('Failed to save receipt', 'error');
+    }
     closeForm();
   };
 
@@ -92,7 +101,7 @@ export default function ReceiptEntry() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.receipts].reverse()} searchFields={['receiptNo']} />
+        <DataTable columns={columns} data={[...state.receipts].reverse()} searchFields={['receiptNo']} emptyState={{ title: 'No receipts yet', description: 'Record your first receipt entry.', actionLabel: 'New Receipt', onAction: () => { setForm(emptyForm); setTouched({}); setSubmitted(false); setShowForm(true); } }} />
       </div>
 
       <Modal isOpen={showForm} onClose={closeForm} title="New Receipt Entry">
@@ -154,7 +163,7 @@ export default function ReceiptEntry() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>Save</button>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={(submitted && hasErrors) || saving}>Save</button>
         </div>
       </Modal>
     </div>

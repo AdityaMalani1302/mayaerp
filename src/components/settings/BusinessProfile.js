@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import FormField, { ErrorSummary } from '../common/FormField';
 import { validators, validateForm } from '../../utils/validation';
 import {
@@ -23,6 +24,7 @@ const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
 export default function BusinessProfile() {
   const { state, dispatch } = useApp();
+  const confirm = useConfirm();
   const [form, setForm] = useState({ ...state.company });
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -123,8 +125,9 @@ export default function BusinessProfile() {
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const handleReset = () => {
-    if (window.confirm('Reset all changes to last saved values?')) {
+  const handleReset = async () => {
+    const ok = await confirm('Reset all changes to last saved values?', { title: 'Reset Changes', variant: 'warning', confirmLabel: 'Reset' });
+    if (ok) {
       setForm({ ...state.company });
       setTouched({});
       setSubmitted(false);

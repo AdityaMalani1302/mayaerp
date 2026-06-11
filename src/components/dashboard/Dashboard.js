@@ -3,21 +3,94 @@ import { useApp } from '../../context/AppContext';
 import { formatCurrency } from '../../utils/helpers';
 import {
   TrendingUp, TrendingDown, Wallet, Building2,
-  ArrowUpCircle, ArrowDownCircle
+  ArrowUpCircle, ArrowDownCircle, ArrowUp, ArrowDown
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  PieChart, Pie, Cell, ResponsiveContainer
+  PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+function TrendBadge({ value }) {
+  if (value === 0 || value == null) return null;
+  const isUp = value > 0;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isUp ? 'text-emerald-600' : 'text-red-600'}`}>
+      {isUp ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
+      {Math.abs(value).toFixed(1)}%
+    </span>
+  );
+}
+
+function Sparkline({ data, color }) {
+  const chartData = data.map((v, i) => ({ v, i }));
+  if (chartData.length < 2) return null;
+  return (
+    <div className="h-10 mt-1">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.15} />
+              <stop offset="100%" stopColor={color} stopOpacity={0.01} />
+            </linearGradient>
+          </defs>
+          <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#grad-${color})`} dot={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { state } = useApp();
+  const currentMonth = new Date().getMonth();
+
+  const monthTotals = useMemo(() => {
+    const sales = Array(12).fill(0);
+    const purchases = Array(12).fill(0);
+    const receipts = Array(12).fill(0);
+    const payments = Array(12).fill(0);
+
+    state.salesInvoices.forEach(inv => {
+      if (inv.date) {
+        const m = parseInt(inv.date.substring(5, 7)) - 1;
+        if (m >= 0 && m < 12) sales[m] += inv.grandTotal || 0;
+      }
+    });
+    state.purchaseBills.forEach(b => {
+      if (b.date) {
+        const m = parseInt(b.date.substring(5, 7)) - 1;
+        if (m >= 0 && m < 12) purchases[m] += b.grandTotal || 0;
+      }
+    });
+    state.receipts.forEach(r => {
+      if (r.date) {
+        const m = parseInt(r.date.substring(5, 7)) - 1;
+        if (m >= 0 && m < 12) receipts[m] += r.amount || 0;
+      }
+    });
+    state.payments.forEach(p => {
+      if (p.date) {
+        const m = parseInt(p.date.substring(5, 7)) - 1;
+        if (m >= 0 && m < 12) payments[m] += p.amount || 0;
+      }
+    });
+
+    return { sales, purchases, receipts, payments };
+  }, [state]);
+
+  const calcTrend = (monthlyArray) => {
+    const cur = monthlyArray[currentMonth] || 0;
+    const prev = currentMonth > 0 ? (monthlyArray[currentMonth - 1] || 0) : 0;
+    if (prev === 0) return cur > 0 ? 100 : 0;
+    return ((cur - prev) / prev) * 100;
+  };
 
   const stats = useMemo(() => {
-    const totalSales = state.salesInvoices.reduce((s, i) => s + (i.grandTotal || 0), 0);
-    const totalPurchases = state.purchaseBills.reduce((s, i) => s + (i.grandTotal || 0), 0);
+    const totalSales = monthTotals.sales.reduce((s, v) => s + v, 0);
+    const totalPurchases = monthTotals.purchases.reduce((s, v) => s + v, 0);
     const cashAccount = state.accounts.find(a => a.name === 'Cash');
     const bankAccounts = state.accounts.filter(a => a.type === 'Bank');
     const bankBalance = bankAccounts.reduce((s, a) => s + a.balance, 0);
@@ -35,21 +108,16 @@ export default function Dashboard() {
       outReceivables,
       outPayables,
     };
-  }, [state]);
+  }, [state, monthTotals]);
 
   const monthlyData = useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return months.map((m, i) => {
-      const monthStr = String(i + 1).padStart(2, '0');
-      const sales = state.salesInvoices
-        .filter(inv => inv.date && inv.date.substring(5, 7) === monthStr)
-        .reduce((s, inv) => s + (inv.grandTotal || 0), 0);
-      const purchases = state.purchaseBills
-        .filter(bill => bill.date && bill.date.substring(5, 7) === monthStr)
-        .reduce((s, bill) => s + (bill.grandTotal || 0), 0);
-      return { month: m, Sales: sales, Purchase: purchases };
-    });
-  }, [state.salesInvoices, state.purchaseBills]);
+    return months.map((m, i) => ({
+      month: m,
+      Sales: monthTotals.sales[i],
+      Purchase: monthTotals.purchases[i],
+    }));
+  }, [monthTotals]);
 
   const topProducts = useMemo(() => {
     const itemSales = {};
@@ -77,9 +145,9 @@ export default function Dashboard() {
   }, [state]);
 
   const cards = [
-    { label: 'Total Sales', value: stats.totalSales, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Total Purchases', value: stats.totalPurchases, icon: TrendingDown, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Cash Balance', value: stats.cashBalance, icon: Wallet, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { label: 'Total Sales', value: stats.totalSales, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: calcTrend(monthTotals.sales), sparkData: monthTotals.sales, sparkColor: '#10b981' },
+    { label: 'Total Purchases', value: stats.totalPurchases, icon: TrendingDown, color: 'text-blue-600', bg: 'bg-blue-50', trend: calcTrend(monthTotals.purchases), sparkData: monthTotals.purchases, sparkColor: '#3b82f6' },
+    { label: 'Cash Balance', value: stats.cashBalance, icon: Wallet, color: 'text-amber-600', bg: 'bg-amber-50', sparkData: monthTotals.receipts.map((r, i) => r - monthTotals.payments[i]), sparkColor: '#f59e0b' },
     { label: 'Bank Balance', value: stats.bankBalance, icon: Building2, color: 'text-purple-600', bg: 'bg-purple-50' },
     { label: 'Receivables', value: stats.outReceivables, icon: ArrowUpCircle, color: 'text-orange-600', bg: 'bg-orange-50' },
     { label: 'Payables', value: stats.outPayables, icon: ArrowDownCircle, color: 'text-red-600', bg: 'bg-red-50' },
@@ -94,14 +162,18 @@ export default function Dashboard() {
         {cards.map(card => {
           const Icon = card.icon;
           return (
-            <div key={card.label} className="card !p-4">
+            <div key={card.label} className="card card-hover !p-4">
               <div className="flex items-center gap-2 mb-2">
                 <div className={`p-2 rounded-lg ${card.bg}`}>
                   <Icon size={18} className={card.color} />
                 </div>
               </div>
-              <p className="text-xs text-gray-500 mb-1">{card.label}</p>
+              <p className="text-xs text-gray-500 mb-1 flex items-center gap-2">
+                {card.label}
+                {card.trend !== undefined && <TrendBadge value={card.trend} />}
+              </p>
               <p className="text-lg font-bold text-gray-900">{formatCurrency(card.value)}</p>
+              {card.sparkData && <Sparkline data={card.sparkData} color={card.sparkColor} />}
             </div>
           );
         })}

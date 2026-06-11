@@ -67,7 +67,7 @@ const allMenuItems = [
   { key: 'user-management', label: 'User Management', icon: Users },
 ];
 
-export default function Sidebar({ currentPage, onNavigate, collapsed, onToggle }) {
+export default function Sidebar({ currentPage, onNavigate, collapsed, onToggle, mobileOpen }) {
   const [expanded, setExpanded] = useState({});
   const { hasAccess } = useAuth();
 
@@ -93,7 +93,7 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, onToggle }
   const isParentActive = (item) => item.children?.some(c => c.key === currentPage);
 
   return (
-    <aside className={`bg-white border-r border-gray-200 h-screen flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'} flex-shrink-0`}>
+    <aside className={`bg-white border-r border-gray-200 h-screen flex flex-col transition-all duration-200 flex-shrink-0 z-40 ${mobileOpen ? 'fixed inset-y-0 left-0 w-64 shadow-xl' : collapsed ? 'w-16 hidden md:flex' : 'w-64 hidden md:flex'}`}>
       <div className="flex items-center justify-between p-4 border-b border-gray-100">
         {!collapsed && <span className="text-lg font-bold text-blue-700">MayaSoft ERP</span>}
         <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">

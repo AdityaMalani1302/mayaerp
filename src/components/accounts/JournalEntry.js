@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -9,6 +10,7 @@ import { validators, validateForm } from '../../utils/validation';
 
 export default function JournalEntry() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ date: today(), narration: '' });
   const [lines, setLines] = useState([
@@ -17,6 +19,7 @@ export default function JournalEntry() {
   ]);
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const totalDebit = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
   const totalCredit = lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
@@ -55,7 +58,13 @@ export default function JournalEntry() {
     setSubmitted(true);
     setTouched({ date: true, narration: true });
     if (hasErrors) return;
-    dispatch({ type: 'ADD_JOURNAL_ENTRY', payload: { ...form, lines } });
+    setSaving(true);
+    try {
+      dispatch({ type: 'ADD_JOURNAL_ENTRY', payload: { ...form, lines } });
+      addToast('Journal entry saved successfully', 'success');
+    } catch (e) {
+      addToast('Failed to save journal entry', 'error');
+    }
     closeForm();
   };
 
@@ -84,7 +93,7 @@ export default function JournalEntry() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.journalEntries].reverse()} searchFields={['entryNo', 'narration']} />
+        <DataTable columns={columns} data={[...state.journalEntries].reverse()} searchFields={['entryNo', 'narration']} emptyState={{ title: 'No journal entries yet', description: 'Create your first journal entry.', actionLabel: 'New Journal', onAction: () => { closeForm(); setShowForm(true); } }} />
       </div>
 
       <Modal isOpen={showForm} onClose={closeForm} title="New Journal Entry" size="lg">
@@ -122,7 +131,7 @@ export default function JournalEntry() {
                           value={line.account}
                           onChange={e => {
                             const updated = [...lines];
-                            updated[idx].account = e.target.value;
+                            updated[idx] = { ...updated[idx], account: e.target.value };
                             setLines(updated);
                           }}
                         >
@@ -140,8 +149,7 @@ export default function JournalEntry() {
                           value={line.debit}
                           onChange={e => {
                             const updated = [...lines];
-                            updated[idx].debit = Number(e.target.value);
-                            if (Number(e.target.value) > 0) updated[idx].credit = 0;
+                            updated[idx] = { ...updated[idx], debit: Number(e.target.value), credit: Number(e.target.value) > 0 ? 0 : line.credit };
                             setLines(updated);
                           }}
                         />
@@ -155,8 +163,7 @@ export default function JournalEntry() {
                           value={line.credit}
                           onChange={e => {
                             const updated = [...lines];
-                            updated[idx].credit = Number(e.target.value);
-                            if (Number(e.target.value) > 0) updated[idx].debit = 0;
+                            updated[idx] = { ...updated[idx], credit: Number(e.target.value), debit: Number(e.target.value) > 0 ? 0 : line.debit };
                             setLines(updated);
                           }}
                         />
@@ -199,7 +206,7 @@ export default function JournalEntry() {
 
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>Save</button>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={(submitted && hasErrors) || saving}>Save</button>
         </div>
       </Modal>
     </div>

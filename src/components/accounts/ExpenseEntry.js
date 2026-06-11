@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import DataTable from '../common/DataTable';
 import Modal from '../common/Modal';
 import FormField, { ErrorSummary } from '../common/FormField';
@@ -11,13 +13,16 @@ const emptyForm = { date: today(), expenseHead: 'Rent', amount: 0, paidFrom: 'Ca
 
 export default function ExpenseEntry() {
   const { state, dispatch } = useApp();
+  const { addToast } = useToast();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const payAccountName = form.paidFrom === 'Cash' ? 'Cash' : 'HDFC Bank - Current';
-  const payAccount = state.accounts.find(a => a.name === payAccountName);
+  const payAccount = state.accounts.find(a => form.paidFrom === 'Cash' ? a.name === 'Cash' : a.type === 'Bank');
+  const payAccountName = payAccount?.name || (form.paidFrom === 'Cash' ? 'Cash' : 'Bank');
   const insufficientFunds = payAccount && Number(form.amount) > payAccount.balance;
 
   const errors = useMemo(() => {
@@ -38,14 +43,21 @@ export default function ExpenseEntry() {
   const hasErrors = Object.values(errors).some(e => e);
   const touch = (field) => setTouched(prev => ({ ...prev, [field]: true }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSubmitted(true);
     setTouched({ date: true, amount: true, expenseHead: true });
     if (hasErrors) return;
     if (insufficientFunds) {
-      if (!window.confirm(`${payAccountName} balance (${formatCurrency(payAccount.balance)}) is less than expense amount. The balance will go negative. Continue?`)) return;
+      const ok = await confirm(`${payAccountName} balance (${formatCurrency(payAccount?.balance || 0)}) is less than expense amount. The balance will go negative.`, { title: 'Low Balance', variant: 'warning', confirmLabel: 'Continue Anyway' });
+      if (!ok) return;
     }
-    dispatch({ type: 'ADD_EXPENSE', payload: form });
+    setSaving(true);
+    try {
+      dispatch({ type: 'ADD_EXPENSE', payload: form });
+      addToast('Expense saved successfully', 'success');
+    } catch (e) {
+      addToast('Failed to save expense', 'error');
+    }
     closeForm();
   };
 
@@ -74,7 +86,7 @@ export default function ExpenseEntry() {
         </button>
       </div>
       <div className="card">
-        <DataTable columns={columns} data={[...state.expenses].reverse()} searchFields={['expenseNo', 'expenseHead', 'narration']} />
+        <DataTable columns={columns} data={[...state.expenses].reverse()} searchFields={['expenseNo', 'expenseHead', 'narration']} emptyState={{ title: 'No expenses yet', description: 'Record your first expense entry.', actionLabel: 'New Expense', onAction: () => { setForm(emptyForm); setTouched({}); setSubmitted(false); setShowForm(true); } }} />
       </div>
 
       <Modal isOpen={showForm} onClose={closeForm} title="New Expense Entry">
@@ -125,7 +137,7 @@ export default function ExpenseEntry() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={closeForm} className="btn btn-secondary">Cancel</button>
-          <button onClick={handleSave} className="btn btn-primary" disabled={submitted && hasErrors}>Save</button>
+          <button data-keyboard-save onClick={handleSave} className="btn btn-primary" disabled={(submitted && hasErrors) || saving}>Save</button>
         </div>
       </Modal>
     </div>
